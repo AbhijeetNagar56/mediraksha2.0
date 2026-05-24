@@ -1,27 +1,40 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
+
 import { pool, connectDB } from './config/db.js';
 
+// routes
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import doctorRoutes from './routes/doctorRoutes.js';
+import authVerify from './middlewares/authVerify.js';
+
+
 dotenv.config();
-
-
 const app = express();
 
+
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true,
+}));
+
+
+// Define routes
 app.get('/api', (req, res) => {
   res.status(200).send('Mediraksha API is running');
 });
+app.use('/api/auth', authRoutes);
+app.use('/api/user',authVerify, userRoutes);
+app.use('/api/doctor', authVerify, doctorRoutes);
 
-app.get('/api/sql', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT NOW()');
-    res.status(200).json({ time: result.rows[0].now });
-  } catch (err) {
-    console.error('Error executing SQL query', err);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
 
-console.log(process.env.DB_URL);
+// Start the server after connecting to the database
 connectDB().then(() => {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
