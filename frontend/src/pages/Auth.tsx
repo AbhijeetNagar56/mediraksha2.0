@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import axios from "axios";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "react-hot-toast";
+import api from '../api/Api'
 
-const url = "http://localhost:8000/api";
+
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
 
   const handleSignUp = async () => {
-    const response = await axios.post(`${url}/auth/signup`, {
+    const response = await api.post('/auth/signup', {
       name,
       email,
       age,
@@ -36,7 +36,7 @@ const Auth = () => {
   };
 
   const handleLogIn = async () => {
-    const response = await axios.post(`${url}/auth/login`, {
+    const response = await api.post('/auth/login', {
       email,
       password
     });
