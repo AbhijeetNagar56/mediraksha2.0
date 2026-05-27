@@ -10,9 +10,9 @@ export const getUserDetails = async (req, res) => {
 
     // Explicitly select fields to avoid sending the password hash back to the client
     const query = `
-      SELECT "Id", "name", "email", "number", "age", "gender", "registeredDoctorId", "created_at", "updated_at" 
+      SELECT "id", "name", "email", "number", "age", "gender", "registeredDoctorId", "created_at", "updated_at" 
       FROM "User" 
-      WHERE "Id" = $1;
+      WHERE "id" = $1;
     `;
     const result = await pool.query(query, [userId]);
 
@@ -80,8 +80,8 @@ export const updateUserProfile = async (req, res) => {
     const query = `
       UPDATE "User"
       SET ${fieldsToUpdate.join(', ')}
-      WHERE "Id" = $${whereClauseIndex}
-      RETURNING "Id", "name", "email", "number", "age", "gender", "registeredDoctorId", "updated_at";
+      WHERE "id" = $${whereClauseIndex}
+      RETURNING "id", "name", "email", "number", "age", "gender", "registeredDoctorId", "updated_at";
     `;
 
     const result = await pool.query(query, values);
@@ -117,7 +117,7 @@ export const deleteUserAccount = async (req, res) => {
     await pool.query(`DELETE FROM "Report" WHERE "userId" = $1;`, [userId]);
 
     // Then delete the user account
-    const query = `DELETE FROM "User" WHERE "Id" = $1 RETURNING "Id";`;
+    const query = `DELETE FROM "User" WHERE id = $1 RETURNING "id";`;
     const result = await pool.query(query, [userId]);
 
     if (result.rows.length === 0) {

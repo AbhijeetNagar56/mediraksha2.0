@@ -7,14 +7,14 @@ export const getAllMeetings = async (req, res) => {
   try {
     const [appointments] = await pool.query(
       `SELECT 
-        a.Id, a.appointmentDate, a.slotTime, a.status, a.reasonOfAppointment,
+        "a.Id", "a.appointmentDate", "a.slotTime", a.status, "a.reasonOfAppointment",
         d.name AS doctorName, d.speciality, d.hospital,
-        s.bookingDate, s.status AS slotStatus
-       FROM Appointments a
-       JOIN Doctor d ON a.doctorId = d.Id
-       JOIN Slots s ON a.slotId = s.Id
-       WHERE a.userId = ?
-       ORDER BY a.appointmentDate DESC, a.slotTime ASC`,
+        "s.bookingDate", s.status AS slotStatus
+       FROM "Appointment" a
+       JOIN "Doctor" d ON 'a.doctorId" = d.id
+       JOIN "Slot" s ON "a.slotId" = s.id
+       WHERE "a.userId" = $1
+       ORDER BY "a.appointmentDate" DESC, "a.slotTime" ASC`,
       [userId]
     );
 
@@ -37,13 +37,13 @@ export const getMeetingById = async (req, res) => {
   try {
     const [appointment] = await pool.query(
       `SELECT 
-        a.Id, a.appointmentDate, a.slotTime, a.status, a.reasonOfAppointment,
+        a.id, "a.appointmentDate", "a.slotTime", a.status, "a.reasonOfAppointment",
         d.name AS doctorName, d.speciality, d.hospital, d.number AS doctorContact,
-        s.bookingDate, s.status AS slotStatus
-       FROM Appointments a
-       JOIN Doctor d ON a.doctorId = d.Id
-       JOIN Slots s ON a.slotId = s.Id
-       WHERE a.Id = ? AND a.userId = ?`,
+        "s.bookingDate", s.status AS slotStatus
+       FROM "Appointments a
+       JOIN "Doctor" d ON "a.doctorId" = d.id
+       JOIN "Slot" s ON "a.slotId" = s.id
+       WHERE a.id = $1 AND a.userId = $2`,
       [id, userId]
     );
 
@@ -66,7 +66,7 @@ export const deleteMeeting = async (req, res) => {
   try {
     // Verify ownership before deletion
     const [appointment] = await pool.query(
-      `SELECT Id, slotId, status FROM Appointments WHERE Id = ? AND userId = ?`,
+      `SELECT id, slotId, status FROM "Appointment" WHERE id = $1 AND "userId" = $2`,
       [id, userId]
     );
 
@@ -80,11 +80,11 @@ export const deleteMeeting = async (req, res) => {
 
     // Free up the slot back to available
     await pool.query(
-      `UPDATE Slots SET status = 'available' WHERE Id = ?`,
+      `UPDATE "Slot" SET status = 'available' WHERE id = $1`,
       [appointment[0].slotId]
     );
 
-    await pool.query(`DELETE FROM Appointments WHERE Id = ?`, [id]);
+    await pool.query(`DELETE FROM "Appointment" WHERE id = ?`, [id]);
 
     res.status(200).json({ success: true, message: 'Appointment cancelled successfully' });
   } catch (error) {
@@ -109,8 +109,8 @@ export const bookMeeting = async (req, res) => {
 
     // Lock the slot row to prevent race conditions
     const [slot] = await conn.query(
-      `SELECT Id, status, bookingDate FROM Slots 
-       WHERE Id = ? AND doctorId = ? AND status = 'available'
+      `SELECT id, status, "bookingDate" FROM "Slot"
+       WHERE id = $1 AND "doctorId" = $2 AND status = 'available'
        FOR UPDATE`,
       [slotId, doctorId]
     );
@@ -122,8 +122,8 @@ export const bookMeeting = async (req, res) => {
 
     // Check user does not already have an appointment with same doctor on same date
     const [duplicate] = await conn.query(
-      `SELECT Id FROM Appointments 
-       WHERE userId = ? AND doctorId = ? AND appointmentDate = ? AND status != 'cancelled'`,
+      `SELECT id FROM "Appointment" 
+       WHERE "userId" = $1 AND "doctorId" = $2 AND "appointmentDate" = $3 AND status != 'cancelled'`,
       [userId, doctorId, appointmentDate]
     );
 
@@ -134,14 +134,14 @@ export const bookMeeting = async (req, res) => {
 
     // Mark slot as booked
     await conn.query(
-      `UPDATE Slots SET status = 'booked', userId = ? WHERE Id = ?`,
+      `UPDATE "Slot" SET status = 'booked', "userId' = $1 WHERE id = $2`,
       [userId, slotId]
     );
 
     // Create the appointment
     const [result] = await conn.query(
-      `INSERT INTO Appointments (userId, doctorId, slotId, appointmentDate, reasonOfAppointment, status)
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
+      `INSERT INTO "Appointment" "(userId, doctorId, slotId, appointmentDate, reasonOfAppointment, status)"
+       VALUES ($1, $2, $3, $4, $5, 'pending')`,
       [userId, doctorId, slotId, appointmentDate, reasonOfAppointment || null]
     );
 
@@ -172,7 +172,7 @@ export const getAvailableSlots = async (req, res) => {
 
   try {
     const [doctor] = await pool.query(
-      `SELECT Id, name, speciality, hospital FROM Doctor WHERE Id = ?`,
+      `SELECT id, name, speciality, hospital FROM "Doctor" WHERE id = $1`,
       [doctorId]
     );
 
@@ -181,10 +181,10 @@ export const getAvailableSlots = async (req, res) => {
     }
 
     const [slots] = await pool.query(
-      `SELECT Id, bookingDate, status, created_at
-       FROM Slots
-       WHERE doctorId = ? AND status = 'available' AND bookingDate >= ?
-       ORDER BY bookingDate ASC`,
+      `SELECT id, "bookingDate", status, created_at
+       FROM "Slot"
+       WHERE "doctorId" = $1 AND status = 'available' AND "bookingDate" >= $2
+       ORDER BY "bookingDate" ASC`,
       [doctorId, fromDate]
     );
 

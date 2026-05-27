@@ -7,7 +7,7 @@ export const getMyDoctor = async (req, res) => {
 
   try {
     const [user] = await pool.query(
-      `SELECT registeredDoctorId FROM User WHERE Id = ?`,
+      `SELECT "registeredDoctorId" FROM "User" WHERE id = $1`,
       [userId]
     );
 
@@ -20,9 +20,9 @@ export const getMyDoctor = async (req, res) => {
     }
 
     const [doctor] = await pool.query(
-      `SELECT Id, name, email, number, age, gender, hospital, speciality, created_at
-       FROM Doctor
-       WHERE Id = ?`,
+      `SELECT id, name, email, number, age, gender, hospital, speciality, created_at
+       FROM "Doctor"
+       WHERE Id = $1`,
       [user[0].registeredDoctorId]
     );
 
@@ -48,8 +48,8 @@ export const getDoctorByName = async (req, res) => {
 
   try {
     const [doctors] = await pool.query(
-      `SELECT Id, name, email, number, age, gender, hospital, speciality
-       FROM Doctor
+      `SELECT id, name, email, number, age, gender, hospital, speciality
+       FROM "Doctor"
        WHERE name LIKE ?
        ORDER BY name ASC`,
       [`%${name.trim()}%`]
@@ -78,9 +78,9 @@ export const getDoctorById = async (req, res) => {
 
   try {
     const [doctor] = await pool.query(
-      `SELECT Id, name, email, number, age, gender, hospital, speciality, created_at
-       FROM Doctor
-       WHERE Id = ?`,
+      `SELECT id, name, email, number, age, gender, hospital, speciality, created_at
+       FROM "Doctor"
+       WHERE Id = $1`,
       [doctorId]
     );
 
@@ -90,7 +90,7 @@ export const getDoctorById = async (req, res) => {
 
     // Check current registered doctor on user
     const [user] = await pool.query(
-      `SELECT registeredDoctorId FROM User WHERE Id = ?`,
+      `SELECT "registeredDoctorId" FROM "User" WHERE id = $1`,
       [userId]
     );
 
@@ -100,7 +100,7 @@ export const getDoctorById = async (req, res) => {
     if (!user[0].registeredDoctorId) {
       // No doctor registered yet — auto-register this one
       await pool.query(
-        `UPDATE User SET registeredDoctorId = ? WHERE Id = ?`,
+        `UPDATE "User" SET "registeredDoctorId" = $1 WHERE id = $2`,
         [doctorId, userId]
       );
       registered = true;
@@ -134,7 +134,7 @@ export const removeRegisteredDoctor = async (req, res) => {
 
   try {
     const [user] = await pool.query(
-      `SELECT registeredDoctorId FROM User WHERE Id = ?`,
+      `SELECT "registeredDoctorId" FROM "User" WHERE id = $1`,
       [userId]
     );
 
@@ -152,8 +152,8 @@ export const removeRegisteredDoctor = async (req, res) => {
 
     // Check for any pending/upcoming appointments with this doctor before removing
     const [activeAppointments] = await pool.query(
-      `SELECT Id FROM Appointments
-       WHERE userId = ? AND doctorId = ? AND status IN ('pending', 'confirmed')
+      `SELECT id FROM "Appointment"
+       WHERE "userId" = $1 AND "doctorId" = $2 AND status IN ('pending', 'confirmed')
        AND appointmentDate >= CURDATE()`,
       [userId, doctorId]
     );
@@ -167,7 +167,7 @@ export const removeRegisteredDoctor = async (req, res) => {
     }
 
     await pool.query(
-      `UPDATE User SET registeredDoctorId = NULL WHERE Id = ?`,
+      `UPDATE User SET "registeredDoctorId" = NULL WHERE id = $1`,
       [userId]
     );
 

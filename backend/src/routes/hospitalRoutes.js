@@ -1,5 +1,5 @@
 import router from 'express';
-import { getHospitals, getHospitalById } from '../controllers/hospitalController';
+import { getHospitals, getHospitalById } from '../controllers/hospitalController.js';
 
 const hospitalRoutes = router();
 
