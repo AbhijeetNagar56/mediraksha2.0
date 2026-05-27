@@ -1,7 +1,11 @@
+import DoctorProfile from "./DoctorProfile"
 
 const DoctorPage = () => {
   return (
-    <div>DoctorPage</div>
+    <div>
+      DoctorPage
+      <DoctorProfile />
+    </div>
   )
 }
 
