@@ -1,0 +1,172 @@
+============== Mediraksha DATABASE =====================
+Table User {
+  Id integer [primary key]
+  name varchar [not null]
+  email varchar [unique, not null]
+  number varchar
+  age integer
+  gender enum
+  registeredDoctorId integer
+  password varchar [not null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Doctor {
+  Id integer [primary key]
+  name varchar [not null]
+  email varchar [unique, not null]
+  number varchar
+  age integer
+  gender enum
+  hospital varchar
+  speciality varchar
+  password varchar [not null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Appointments {
+  Id integer [primary key]
+  userId integer [not null]
+  doctorId integer [not null]
+  slotId integer [not null]
+  RequestGroupId integer
+  slotTime time
+  appointmentDate date [not null]
+  reasonOfAppointment varchar
+  status enum
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Report {
+  Id integer [primary key]
+  userId integer [not null]
+  uploadedBy varchar
+  doctorId integer
+  title varchar [not null]
+  category enum
+  fileSize integer
+  fileId integer
+  visibility varchar
+  originalFileName varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Slots {
+  Id integer [primary key]
+  userId integer
+  doctorId integer [not null]
+  bookingDate date [not null]
+  status enum
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Hospital {
+  Id integer [primary key]
+  name varchar [not null]
+  doctorId integer
+  beds integer
+  rooms integer
+  oxygenCylinder integer
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table diseases {
+  Id integer [primary key]
+  code integer [unique]
+  name varchar [not null]
+  symtoms varchar
+  solution varchar
+  created_at timestamp
+  updated_at timestamp
+} 
+
+Ref: "User"."registeredDoctorId" < "Doctor"."Id"
+
+Ref: "Report"."userId" < "User"."Id"
+
+Ref: "Report"."doctorId" < "Doctor"."Id"
+
+Ref: "Slots"."doctorId" < "Doctor"."Id"
+
+Ref: "Appointments"."slotId" < "Slots"."Id"
+
+Ref: "Appointments"."userId" < "User"."Id"
+
+Ref: "Appointments"."doctorId" < "Doctor"."Id"
+
+Ref: "Hospital"."doctorId" < "Doctor"."Id"
+
+
+============== Mediraksha API endpoints ================
+# Auth
+/api/auth/signup      POST   body attribute { name, email, number, age, gender, password }                        response: save in postgres DB user relation
+/api/auth/login       POST   body attribute { email, password }                                                   response: give jwt token
+/api/doctor/signup    POST   body attribute { name, email, number, age, gender, hospital, speciality, password }  response: save in doctor relation
+/api/doctor/login     POST   body attribute { email, password }                                                   response: give jwt token
+/api/logout           DELETE body attribute { token }                                                             response: purge token
+
+# AI Chat
+/api/aichat           GET    body attribute { message }             response: ai diagnosis suggestion
+
+# Hospital 
+/api/hospital/all     GET    body attribute not required            response: all hospital
+/api/hospital/:id     GET    body attribute not required            response: search by id hospital  
+
+# Diseases            
+/api/disease/all     GET    body attribute not required            response: all diseases detail
+/api/disease/:id     GET    body attribute not required            response: search by id diseases
+
+# Required login [protected Routes]
+# User Operation 
+/api/user/info/detail     GET
+/api/user/info/update     PATCH
+/api/user/info/delete     DELETE
+
+# Required login [protected Routes]
+# Files Upload and Manage
+/api/user/report/upload   POST
+/api/user/report/all      GET
+/api/user/report/:id      GET
+/api/user/report/:id      DELETE
+
+# Required login [protected Routes]
+# Appointment Scheduling
+/api/user/meetings/all                GET
+/api/user/meetings/:id                GET
+/api/user/meetings/:id                DELETE
+/api/user/meetings/book               POST
+/api/user/meetings/slot/:doctorId     GET
+
+# Required login [protected Routes]
+# doctor details of user
+/api/user/doctor/my                 GET
+/api/user/doctor/search/:name       GET
+/api/user/doctor/:doctorId          GET
+/api/user/doctor/:doctorId          DELETE
+
+
+================ Doctor side =================
+# Required login
+# doctor operation
+/api/doctor/info/detail           GET
+/api/doctor/info/update           PATCH
+/api/doctor/info/delete           DELETE
+
+
+# Required login
+# meeting by doctor side
+/api/doctor/meetings/:id          GET       // get detailed information
+/api/doctor/meetings/:id          DELETE    // denied by doctor
+/api/doctor/meetings/all          GET         // give all meetings for that doctor
+
+# Required login
+# doctor's patient(user) connection
+/api/doctor/user/:id              GET      // patient(user) detail
+/api/doctor/user/:id              DELETE   // remove as patient
+/api/doctor/user/my               GET      // get all patient
