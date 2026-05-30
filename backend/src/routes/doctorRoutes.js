@@ -28,6 +28,10 @@ router.patch('/info/update', updateDoctorDetail);
 router.delete('/info/delete', deleteDoctorAccount);
 
 
+// ── DOCTOR SLOT ──
+// Resolves to: /doctor/slot/all, /doctor/slot/:id, etc.
+
+
 // ── APPOINTMENTS / MEETINGS MANAGEMENT ──
 // Resolves to: /doctor/meetings/all, /doctor/meetings/:id
 // Note: Hardcoded collection endpoints stay grouped safely above parameter routes

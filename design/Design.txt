@@ -48,7 +48,8 @@ Table Report {
   title varchar [not null]
   category enum
   fileSize integer
-  fileId integer
+  fileData text
+  mimeType varchar
   visibility varchar
   originalFileName varchar
   created_at timestamp

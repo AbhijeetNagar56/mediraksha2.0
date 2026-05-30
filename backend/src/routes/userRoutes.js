@@ -34,10 +34,41 @@ const router = express.Router();
 
 // Multer configuration for handling file uploads safely via RAM memory buffers
 const storage = multer.memoryStorage();
+const allowedMimeTypes = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+]);
+
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 } // Optional safety fix: Limit file size upload to 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // Optional safety fix: Limit file size upload to 5MB
+  fileFilter: (_req, file, cb) => {
+    if (allowedMimeTypes.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error('Only PDF and image files are allowed.'));
+  }
 });
+
+const uploadReportFile = (req, res, next) => {
+  upload.single('file')(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    const message = error.code === 'LIMIT_FILE_SIZE'
+      ? 'File is too large. Maximum size is 5MB.'
+      : error.message || 'Invalid file upload.';
+
+    res.status(400).json({ success: false, message });
+  });
+};
 
 // All routes here are automatically prefixed with /api/user and protected by authVerify
 
@@ -45,7 +76,7 @@ const upload = multer({
    FILES UPLOAD AND MANAGE ROUTES
    ========================================== */
 // The upload.single('file') expects the FormData key on the frontend to be named 'file'
-router.post('/report/upload', upload.single('file'), uploadReport);
+router.post('/report/upload', uploadReportFile, uploadReport);
 router.get('/report/all', getAllReports);
 router.get('/report/:id', getReportById);
 router.delete('/report/:id', deleteReport);

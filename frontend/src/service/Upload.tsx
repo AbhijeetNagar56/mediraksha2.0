@@ -13,6 +13,8 @@ interface MedicalFile {
   originalFileName: string;
   category: string;
   visibility: 'private' | 'doctor';
+  mimeType?: string;
+  fileData?: string;
   created_at: string;
 }
 
@@ -22,14 +24,15 @@ interface MessageState {
 }
 
 type PreviewType = 'image' | 'pdf' | 'other' | null;
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 export default function UploadReport() {
   // --- Form State ---
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState<string>('');
   
-  // FIX: Default state string updated to match the lowercase DB enum value
-  const [category, setCategory] = useState<string>('lab_report');
+  const [category, setCategory] = useState<string>('lab');
   const [visibility, setVisibility] = useState<'private' | 'doctor'>('private');
   
   // --- UI & Data State ---
@@ -75,7 +78,23 @@ export default function UploadReport() {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) setFile(selectedFile);
+    if (!selectedFile) return;
+
+    if (!ALLOWED_FILE_TYPES.includes(selectedFile.type)) {
+      showMessage('Only PDF and image files are allowed.', 'error');
+      e.target.value = '';
+      setFile(null);
+      return;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+      showMessage('File is too large. Maximum size is 5MB.', 'error');
+      e.target.value = '';
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
   };
 
   const handleUpload = async (): Promise<void> => {
@@ -89,7 +108,7 @@ export default function UploadReport() {
       const formData = new FormData();
       formData.append('file', file); 
       formData.append('title', title);
-      formData.append('category', category); // This now carries the correct lowercase enum string
+      formData.append('category', category);
       formData.append('visibility', visibility);
 
       const response = await api.post('/user/report/upload', formData, {
@@ -100,12 +119,12 @@ export default function UploadReport() {
 
       if (response.data?.success) {
         setFiles((prev) => [response.data.data, ...prev]);
-        showMessage('Medical record uploaded and encrypted successfully!', 'success');
+        showMessage('Medical record uploaded successfully!', 'success');
 
         // Reset form
         setFile(null);
         setTitle('');
-        setCategory('lab'); // FIX: Reset to match lowercase enum
+        setCategory('lab');
         setVisibility('private');
         
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
@@ -144,16 +163,33 @@ export default function UploadReport() {
     }
   };
 
-  const handlePreview = (originalFileName: string): void => {
-    if (/\.pdf$/i.test(originalFileName)) {
-      setPreviewType('pdf');
-      setPreviewFile('https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf');
-    } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(originalFileName)) {
-      setPreviewType('image');
-      setPreviewFile('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=60');
-    } else {
-      setPreviewType('other');
-      setPreviewFile('#');
+  const getPreviewType = (mimeType?: string, originalFileName = ''): PreviewType => {
+    if (mimeType === 'application/pdf' || /\.pdf$/i.test(originalFileName)) return 'pdf';
+    if (mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(originalFileName)) return 'image';
+    return 'other';
+  };
+
+  const handlePreview = async (id: string): Promise<void> => {
+    try {
+      const response = await api.get(`/user/report/${id}`);
+      const report: MedicalFile = response.data.data;
+
+      if (!report?.fileData) {
+        showMessage('File data is missing for this record.', 'error');
+        return;
+      }
+
+      const type = getPreviewType(report.mimeType, report.originalFileName);
+      setPreviewType(type);
+      setPreviewFile(`data:${report.mimeType || 'application/octet-stream'};base64,${report.fileData}`);
+    } catch (error: any) {
+      console.error('Preview failed:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to load file preview.';
+      if (error.response?.status === 401) {
+        navigate('/auth');
+      } else {
+        showMessage(errorMessage, 'error');
+      }
     }
   };
 
@@ -229,7 +265,6 @@ export default function UploadReport() {
                     <label className="block text-xs font-bold text-slate-600 mb-1.5 items-center gap-1.5">
                       <Tag size={14} /> Category
                     </label>
-                    {/* FIX: Values updated to lowercase matching your PostgreSQL ENUM definitions */}
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
                       value={category}
@@ -348,7 +383,6 @@ export default function UploadReport() {
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            {/* FIX: Uses helper to format db lowercase enum string nicely (e.g. lab_report -> Lab Report) */}
                             <span className="inline-block text-[11px] font-bold tracking-wider px-2 py-0.5 rounded border border-slate-200 text-slate-500 bg-white">
                               {formatCategoryLabel(f.category)}
                             </span>
@@ -364,7 +398,7 @@ export default function UploadReport() {
                             <div className="flex justify-center gap-1">
                               <button
                                 className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                onClick={() => handlePreview(f.originalFileName)}
+                                onClick={() => handlePreview(f.id)}
                                 title="View document"
                               >
                                 <Eye size={18} />

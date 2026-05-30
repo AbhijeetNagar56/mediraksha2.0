@@ -1,5 +1,28 @@
 import { pool } from '../config/db.js';
 
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+]);
+
+const ALLOWED_CATEGORIES = new Set(['lab', 'prescription', 'scan', 'other']);
+const ALLOWED_VISIBILITIES = new Set(['private', 'doctor']);
+const REPORT_METADATA_COLUMNS = `
+  "id", "userId", "uploadedBy", "doctorId", "title", "category",
+  "fileSize", "mimeType", "visibility", "originalFileName",
+  "created_at", "updated_at"
+`;
+
+const isReportStorageSchemaError = (error) => error.code === '42703' || error.code === '22P02';
+
+const sendReportStorageSchemaError = (res) => res.status(500).json({
+  success: false,
+  message: 'Report storage columns are not ready for file data. Run the Report table migration.'
+});
+
 /**
  * @route   POST /api/user/report/upload
  * @desc    Upload a new medical report (Converts file buffer to Base64 and saves to DB)
@@ -7,40 +30,54 @@ import { pool } from '../config/db.js';
 export const uploadReport = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { title, category, visibility, doctorId, uploadedBy } = req.body;
-    
+    const { title, category = 'lab', visibility = 'private', doctorId, uploadedBy } = req.body;
+
     // 1. Validate that the file was caught by Multer memory storage
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
 
-    if (!title) {
+    if (!title?.trim()) {
       return res.status(400).json({ success: false, message: 'Title is required.' });
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(req.file.mimetype)) {
+      return res.status(400).json({ success: false, message: 'Only PDF and image files are allowed.' });
+    }
+
+    if (!ALLOWED_CATEGORIES.has(category)) {
+      return res.status(400).json({ success: false, message: 'Invalid report category.' });
+    }
+
+    if (!ALLOWED_VISIBILITIES.has(visibility)) {
+      return res.status(400).json({ success: false, message: 'Invalid report visibility.' });
     }
 
     const originalFileName = req.file.originalname;
     const fileSize = req.file.size;
-    
-    // FIX: Convert the binary RAM buffer into a clean Base64 string that maps to your TEXT/VARCHAR column
-    const base64FileData = req.file.buffer.toString('base64'); 
+    const mimeType = req.file.mimetype;
+
+    // Convert the binary RAM buffer into a text-safe value for storage in PostgreSQL.
+    const fileData = req.file.buffer.toString('base64');
 
     // 2. Insert into the database
     const query = `
-      INSERT INTO "Report" 
-      ("userId", "uploadedBy", "doctorId", "title", "category", "fileSize", "fileId", "visibility", "originalFileName", "created_at", "updated_at")
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-      RETURNING *;
+      INSERT INTO "Report"
+      ("userId", "uploadedBy", "doctorId", "title", "category", "fileSize", "fileData", "mimeType", "visibility", "originalFileName", "created_at", "updated_at")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+      RETURNING ${REPORT_METADATA_COLUMNS};
     `;
 
     const values = [
       userId,
       uploadedBy || 'user',
       doctorId || null,
-      title,
-      category || null,
+      title.trim(),
+      category,
       fileSize,
-      base64FileData, // <-- Fixed: Sending a text-safe string representation of the file instead of raw bytes
-      visibility || 'private',
+      fileData,
+      mimeType,
+      visibility,
       originalFileName
     ];
 
@@ -54,6 +91,9 @@ export const uploadReport = async (req, res) => {
 
   } catch (error) {
     console.error('Error uploading report:', error);
+    if (isReportStorageSchemaError(error)) {
+      return sendReportStorageSchemaError(res);
+    }
     return res.status(500).json({ success: false, message: 'Server error during upload.' });
   }
 };
@@ -66,7 +106,13 @@ export const getAllReports = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const query = `SELECT * FROM "Report" WHERE "userId" = $1 ORDER BY "created_at" DESC;`;
+    const query = `
+      SELECT
+        ${REPORT_METADATA_COLUMNS}
+      FROM "Report"
+      WHERE "userId" = $1
+      ORDER BY "created_at" DESC;
+    `;
     const result = await pool.query(query, [userId]);
 
     return res.status(200).json({
@@ -76,6 +122,9 @@ export const getAllReports = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching reports:', error);
+    if (isReportStorageSchemaError(error)) {
+      return sendReportStorageSchemaError(res);
+    }
     return res.status(500).json({ success: false, message: 'Server error fetching reports.' });
   }
 };
@@ -89,7 +138,7 @@ export const getReportById = async (req, res) => {
     const userId = req.user.id;
     const reportId = req.params.id;
 
-    const query = `SELECT * FROM "Report" WHERE "id" = $1 AND "userId" = $2;`;
+    const query = `SELECT ${REPORT_METADATA_COLUMNS}, "fileData" FROM "Report" WHERE "id" = $1 AND "userId" = $2;`;
     const result = await pool.query(query, [reportId, userId]);
 
     if (result.rows.length === 0) {
@@ -102,6 +151,9 @@ export const getReportById = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching report:', error);
+    if (isReportStorageSchemaError(error)) {
+      return sendReportStorageSchemaError(res);
+    }
     return res.status(500).json({ success: false, message: 'Server error fetching report.' });
   }
 };

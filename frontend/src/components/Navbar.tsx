@@ -76,7 +76,7 @@ export default function Navbar() {
           >
             Services
           </Link>
-          <Link
+          {/* <Link
             to="/doctor"
             className={`px-4 py-2 rounded-xl font-medium transition-all ${
               isActive("/doctor")
@@ -85,7 +85,7 @@ export default function Navbar() {
             }`}
           >
             Doctor
-          </Link>
+          </Link> */}
         </div>
         
 

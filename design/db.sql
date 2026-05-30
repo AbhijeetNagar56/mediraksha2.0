@@ -74,7 +74,8 @@ CREATE TABLE "Report" (
     "title" VARCHAR NOT NULL,
     "category" report_category_enum,
     "fileSize" INTEGER,
-    "fileId" INTEGER,
+    "fileData" TEXT,
+    "mimeType" VARCHAR,
     "visibility" VARCHAR,
     "originalFileName" VARCHAR,
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -104,6 +105,10 @@ CREATE TABLE "Disease" (
     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE "Report"
+  DROP COLUMN IF EXISTS "fileId",
+  ADD COLUMN IF NOT EXISTS "fileData" TEXT,
+  ADD COLUMN IF NOT EXISTS "mimeType" VARCHAR;
 -- ============================================================================
 -- 3. ADD FOREIGN KEY CONSTRAINTS
 -- ============================================================================
@@ -189,11 +194,11 @@ INSERT INTO Appointment ("userId", "doctorId", "slotId", "requestGroupId", "slot
 (4, 2, 5, 1004, '11:00:00', '2026-05-24', 'Consultation for localized abdominal pain.', 'pending');
 
 -- Insert into Report
-INSERT INTO Report ("userId", "uploadedBy", "doctorId", "title", "category", "fileSize", "fileId", "visibility", "originalFileName") VALUES
-(1, 'Doctor Watson', 3, 'Blood Panel Analysis', 'lab_report', 2048, 98761, 'private', 'blood_test_holmes.pdf'),
-(2, 'Doctor Strange', 5, 'Brain MRI Scan', 'scan', 15420, 98762, 'private', 'mri_stark_t.dicom'),
-(3, 'Agent Scully', 4, 'Autopsy Consultation Report', 'other', 5120, 98763, 'restricted', 'case_file_x.pdf'),
-(4, 'Doctor Grey', 2, 'Pre-Op Ultrasound', 'scan', 4096, 98764, 'private', 'ultrasound_appendix.png');
+INSERT INTO "Report" ("userId", "uploadedBy", "doctorId", "title", "category", "fileSize", "fileData", "mimeType", "visibility", "originalFileName") VALUES
+(1, 'Doctor Watson', 3, 'Blood Panel Analysis', 'lab', 2048, 'ZHVtbXk=', 'application/pdf', 'private', 'blood_test_holmes.pdf'),
+(2, 'Doctor Strange', 5, 'Brain MRI Scan', 'scan', 15420, 'ZHVtbXk=', 'application/pdf', 'private', 'mri_stark_t.pdf'),
+(3, 'Agent Scully', 4, 'Autopsy Consultation Report', 'other', 5120, 'ZHVtbXk=', 'application/pdf', 'doctor', 'case_file_x.pdf'),
+(4, 'Doctor Grey', 2, 'Pre-Op Ultrasound', 'scan', 4096, 'ZHVtbXk=', 'image/png', 'private', 'ultrasound_appendix.png');
 
 -- Insert into Hospital
 INSERT INTO Hospital ("name", "doctorId", "bed", "room", "oxygenCylinder") VALUES
@@ -201,4 +206,3 @@ INSERT INTO Hospital ("name", "doctorId", "bed", "room", "oxygenCylinder") VALUE
 ('Seattle Grace Hospital', 2, 400, 120, 180),
 ('St. Bartholomews Hospital', 3, 250, 80, 90),
 ('Metro-General Hospital', 5, 600, 200, 300);
-
