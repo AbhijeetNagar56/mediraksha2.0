@@ -106,13 +106,6 @@ CREATE TABLE "Disease" (
     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE "Report"
-  DROP COLUMN IF EXISTS "fileId",
-  ADD COLUMN IF NOT EXISTS "fileData" TEXT,
-  ADD COLUMN IF NOT EXISTS "mimeType" VARCHAR;
-
-ALTER TABLE "Slot"
-  ADD COLUMN IF NOT EXISTS "slotTime" TIME NOT NULL DEFAULT '09:00';
 -- ============================================================================
 -- 3. ADD FOREIGN KEY CONSTRAINTS
 -- ============================================================================

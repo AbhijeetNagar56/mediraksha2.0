@@ -1,110 +1,3 @@
-============== Mediraksha DATABASE =====================
-Table User {
-  Id integer [primary key]
-  name varchar [not null]
-  email varchar [unique, not null]
-  number varchar
-  age integer
-  gender enum
-  registeredDoctorId integer
-  password varchar [not null]
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table Doctor {
-  Id integer [primary key]
-  name varchar [not null]
-  email varchar [unique, not null]
-  number varchar
-  age integer
-  gender enum
-  hospital varchar
-  speciality varchar
-  password varchar [not null]
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table Appointments {
-  Id integer [primary key]
-  userId integer [not null]
-  doctorId integer [not null]
-  slotId integer [not null]
-  RequestGroupId integer
-  slotTime time
-  appointmentDate date [not null]
-  reasonOfAppointment varchar
-  status enum
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table Report {
-  Id integer [primary key]
-  userId integer [not null]
-  uploadedBy varchar
-  doctorId integer
-  title varchar [not null]
-  category enum
-  fileSize integer
-  fileData text
-  mimeType varchar
-  visibility varchar
-  originalFileName varchar
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table Slots {
-  Id integer [primary key]
-  userId integer
-  doctorId integer [not null]
-  bookingDate date [not null]
-  slotTime time [not null]
-  status enum
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table Hospital {
-  Id integer [primary key]
-  name varchar [not null]
-  doctorId integer
-  beds integer
-  rooms integer
-  oxygenCylinder integer
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table diseases {
-  Id integer [primary key]
-  code integer [unique]
-  name varchar [not null]
-  symtoms varchar
-  solution varchar
-  created_at timestamp
-  updated_at timestamp
-} 
-
-Ref: "User"."registeredDoctorId" < "Doctor"."Id"
-
-Ref: "Report"."userId" < "User"."Id"
-
-Ref: "Report"."doctorId" < "Doctor"."Id"
-
-Ref: "Slots"."doctorId" < "Doctor"."Id"
-
-Ref: "Appointments"."slotId" < "Slots"."Id"
-
-Ref: "Appointments"."userId" < "User"."Id"
-
-Ref: "Appointments"."doctorId" < "Doctor"."Id"
-
-Ref: "Hospital"."doctorId" < "Doctor"."Id"
-
-
 ============== Mediraksha API endpoints ================
 # Auth
 /api/auth/signup      POST   body attribute { name, email, number, age, gender, password }                        response: save in postgres DB user relation
@@ -114,66 +7,68 @@ Ref: "Hospital"."doctorId" < "Doctor"."Id"
 /api/logout           DELETE body attribute { token }                                                             response: purge token
 
 # AI Chat
-/api/aichat           GET    body attribute { message }             response: ai diagnosis suggestion
+/api/chat            GET    body attribute { message }             response: ai diagnosis suggestion of form {response: airesponse}
 
 # Hospital 
-/api/hospital/all     GET    body attribute not required            response: all hospital
-/api/hospital/:id     GET    body attribute not required            response: search by id hospital  
+/api/hospital/all    GET    body attribute not required            response: all hospital like [{a1, a2}, {a3, a4}]
+/api/hospital/:id    GET    body attribute not required            response: search by id hospital like [{a1, a2}]
 
 # Diseases            
-/api/disease/all     GET    body attribute not required            response: all diseases detail
-/api/disease/:id     GET    body attribute not required            response: search by id diseases
+/api/disease/all     GET    body attribute not required            response: all diseases detail like [{a1, a2}, {a3, a4}]
+/api/disease/:id     GET    body attribute not required            response: search by id diseases like [{a1, a2}]
 
+
+================== User side =================
 # Required login [protected Routes]
-# User Operation 
-/api/user/info/detail     GET
-/api/user/info/update     PATCH
-/api/user/info/delete     DELETE
+# User Operation once login detect userId from cookie
+/api/user/info/detail     GET             get all information of about user name, email, age present in db schema
+/api/user/info/update     PATCH           update user's information
+/api/user/info/delete     DELETE          delete user account by removing entire row from the relation
 
 # Required login [protected Routes]
 # Files Upload and Manage
-/api/user/report/upload   POST
-/api/user/report/all      GET
-/api/user/report/:id      GET
-/api/user/report/:id      DELETE
+/api/user/report/upload   POST            upload report in multer storage 
+/api/user/report/all      GET             get all the report upload by that user
+/api/user/report/:id      GET             view a specific report from the list
+/api/user/report/:id      DELETE           delete report from the storage
 
 # Required login [protected Routes]
 # Appointment Scheduling
-/api/user/meetings/all                GET
-/api/user/meetings/:id                GET
-/api/user/meetings/:id                DELETE
-/api/user/meetings/book               POST
-/api/user/meetings/slot/:doctorId     GET
+/api/user/meetings/all                GET      get details of all scheduled meeting
+/api/user/meetings/:id                GET      get a specific meeting detail
+/api/user/meetings/:id                DELETE   delete the detail
+/api/user/meetings/book               POST     book the details by providing reason and chosing slot from below api endpoint
+/api/user/meetings/slot/:doctorId     GET      get doctor's slot by their id
 
 # Required login [protected Routes]
 # doctor details of user
-/api/user/doctor/my                 GET
-/api/user/doctor/search/:name       GET
-/api/user/doctor/:doctorId          GET
-/api/user/doctor/:doctorId          DELETE
+/api/user/doctor/my                 GET        get my doctor to register a doctor
+/api/user/doctor/search/:name       GET        search doctor by name for user cause they dont have id
+/api/user/doctor/:doctorId          GET        get doctor by id to fetch all the information
+/api/user/doctor/:doctorId          DELETE     remove as my doctor
 
 
 ================ Doctor side =================
 # Required login
 # doctor operation
-/api/doctor/info/detail           GET
-/api/doctor/info/update           PATCH
-/api/doctor/info/delete           DELETE
+/api/doctor/info/detail           GET       get all information name, age, hospital mention in schema
+/api/doctor/info/update           PATCH     update information
+/api/doctor/info/delete           DELETE    delete account by removing entire row from relatino
 
 # Required login
 # slot publish by doctor side
-/api/doctor/slot/all              GET       // all slots published by doctor
-/api/doctor/slot/publish          POST      // body { bookingDate, slotTime } or weekly schedule rules
-/api/doctor/slot/:id              DELETE    // delete available/blocked slot
+/api/doctor/slot/all              GET       all slots published by doctor
+/api/doctor/slot/publish          POST      body { bookingDate, slotTime } or weekly schedule rules
+/api/doctor/slot/:id              DELETE    delete available/blocked slot
 
 # Required login
 # meeting by doctor side
-/api/doctor/meetings/:id          GET       // get detailed information
-/api/doctor/meetings/:id          DELETE    // denied by doctor
-/api/doctor/meetings/all          GET         // give all meetings for that doctor
+/api/doctor/meetings/:id          GET       get detailed information
+/api/doctor/meetings/:id          DELETE    denied by doctor
+/api/doctor/meetings/all          GET       give all meetings for that doctor
 
 # Required login
 # doctor's patient(user) connection
-/api/doctor/user/:id              GET      // patient(user) detail
-/api/doctor/user/:id              DELETE   // remove as patient
-/api/doctor/user/my               GET      // get all patient
+/api/doctor/user/:id              GET       patient(user) detail
+/api/doctor/user/:id              DELETE    remove as patient
+/api/doctor/user/my               GET       get all patient

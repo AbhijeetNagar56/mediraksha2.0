@@ -1,6 +1,0 @@
-ALTER TABLE "Slot"
-  ADD COLUMN IF NOT EXISTS "slotTime" TIME NOT NULL DEFAULT '09:00';
-
-UPDATE "Slot"
-SET "slotTime" = '09:00'
-WHERE "slotTime" IS NULL;
