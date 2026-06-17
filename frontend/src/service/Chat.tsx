@@ -1,39 +1,52 @@
 // pages/Chat.tsx
-import React, { useState, useEffect, useRef, type ChangeEvent } from "react";
-import { Bot, ArrowLeft, Send, Sparkles, User, RefreshCw } from "lucide-react";
+import React, { useState, useRef, type ChangeEvent } from "react";
+import { Bot, ArrowLeft, Sparkles, ChevronRight, ChevronLeft, RefreshCw, AlertCircle, CheckCircle2, Activity } from "lucide-react";
 import { useNavigate } from "react-router";
-import api from '../api/Api'; 
+import api from '../api/Api';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import MicButton from '../components/MicButton';
 
 /* ---------------- TYPES ---------------- */
-interface Message {
-  id: string;
-  sender: "bot" | "user";
-  text: string;
-  timestamp: Date;
+interface StepField {
+  key: string;
+  label: string;
+  placeholder: string;
+  type?: string;
+  unit?: string;
 }
 
-/* ---------------- INITIAL SYSTEM PROMPTS ---------------- */
-const INITIAL_BOT_MESSAGES: Omit<Message, "id" | "timestamp">[] = [
-  {
-    sender: "bot",
-    text: "Hello! I am your HealthAI Virtual Diagnostic Assistant. 🩺"
-  },
-  {
-    sender: "bot",
-    text: "To help provide an accurate screening, please describe how you are feeling, including any symptoms, when they started, or relevant health background."
-  }
+interface Highlight {
+  label: string;
+  value: string;
+}
+
+interface DiagnosticResult {
+  paragraph: string;
+  highlights: Highlight[];
+}
+
+/* ---------------- STEP DEFINITIONS ---------------- */
+const STEPS: StepField[] = [
+  { key: "age", label: "How old are you?", placeholder: "e.g. 34", type: "number", unit: "years" },
+  { key: "height", label: "What is your height?", placeholder: "e.g. 170", type: "number", unit: "cm" },
+  { key: "weight", label: "What is your weight?", placeholder: "e.g. 72", type: "number", unit: "kg" },
+  { key: "symptoms", label: "What symptoms are you currently experiencing?", placeholder: "e.g. headache, fatigue, mild fever since 2 days" },
+  { key: "previousDiseases", label: "Any previous or existing medical conditions?", placeholder: "e.g. diabetes, hypertension, asthma — or type 'None'" },
+  { key: "currentMedications", label: "Are you on any medications or drug doses currently?", placeholder: "e.g. Metformin 500mg twice daily — or type 'None'" },
 ];
 
-export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState<string>("");
-  const [isTyping, setIsTyping] = useState<boolean>(false);
+type FormData = Record<string, string>;
 
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const welcomeTimeoutRef = useRef<number[]>([]); // 🌟 Tracks welcome timers to prevent memory leaks
+/* ---------------- COMPONENT ---------------- */
+export default function Chat() {
   const navigate = useNavigate();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<FormData>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<DiagnosticResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const resultRef = useRef<HTMLDivElement>(null);
 
   /* ── Speech recognition ── */
   const {
@@ -45,10 +58,13 @@ export default function Chat() {
     resetTranscript,
   } = useSpeechRecognition();
 
-  /* Syncs live voice inputs directly into the chat text input box */
-  useEffect(() => {
+  const currentField = STEPS[currentStep];
+  const currentValue = formData[currentField?.key] ?? "";
+
+  /* Sync transcript into current field */
+  React.useEffect(() => {
     if (transcript) {
-      setInputValue(transcript);
+      setFormData(prev => ({ ...prev, [currentField.key]: transcript }));
     }
   }, [transcript]);
 
@@ -56,116 +72,105 @@ export default function Chat() {
     if (isListening) {
       stopListening();
     } else {
-      setInputValue(""); 
       resetTranscript();
       startListening();
     }
   };
 
-  // Load initial welcome script safely with unmount tracking
-  useEffect(() => {
-    initiateWelcomeChat();
-    
-    return () => {
-      // 🌟 Clears active timers if the component unmounts or restarts in Strict Mode
-      welcomeTimeoutRef.current.forEach(clearTimeout);
-    };
-  }, []);
-
-  // Smooth scroll tracking container rule
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
-
-  const initiateWelcomeChat = () => {
-    // 🌟 Cancel any pending welcome execution jobs running in the background background
-    welcomeTimeoutRef.current.forEach(clearTimeout);
-    welcomeTimeoutRef.current = [];
-
-    setMessages([]);
-    setIsTyping(true);
-    
-    const timer1 = window.setTimeout(() => {
-      const msg1: Message = {
-        id: `welcome-1-${Date.now()}`, // 🌟 Dynamically stamped unique keys
-        sender: "bot",
-        text: INITIAL_BOT_MESSAGES[0].text,
-        timestamp: new Date()
-      };
-      setMessages([msg1]);
-      
-      const timer2 = window.setTimeout(() => {
-        const msg2: Message = {
-          id: `welcome-2-${Date.now()}`, // 🌟 Dynamically stamped unique keys
-          sender: "bot",
-          text: INITIAL_BOT_MESSAGES[1].text,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, msg2]);
-        setIsTyping(false);
-      }, 1000);
-
-      welcomeTimeoutRef.current.push(timer2);
-    }, 500);
-
-    welcomeTimeoutRef.current.push(timer1);
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({ ...prev, [currentField.key]: e.target.value }));
   };
 
-  const handleSendMessage = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    const cleanInput = inputValue.trim();
-    if (!cleanInput) return;
-
-    // 1. Construct and append user message element to the chat thread
-    const userMessage: Message = {
-      id: `msg-${Date.now()}-user`,
-      sender: "user",
-      text: cleanInput,
-      timestamp: new Date()
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
-    resetTranscript(); // 🌟 Clear out audio tracking hook cache safely on form submission
-    setIsTyping(true);
-
-    try {
-      // 2. Perform POST request to your backend API route
-      const response = await api.post("/chat", { message: cleanInput });
-      
-      const aiResponseText = response.data?.response || "I could not process that request. Please try rephrasing your symptoms.";
-
-      const botMessage: Message = {
-        id: `msg-${Date.now()}-bot`,
-        sender: "bot",
-        text: aiResponseText,
-        timestamp: new Date()
-      };
-
-      setMessages((prev) => [...prev, botMessage]);
-    } catch (err: any) {
-      console.error("AI Chat Assistant Endpoint Error:", err);
-      
-      // Inject a user-friendly diagnostic message inside the thread if server drops
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-error`,
-        sender: "bot",
-        text: "⚠️ Connection error: Failed to reach the diagnostics server. Please check your network and try re-submitting.",
-        timestamp: new Date()
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsTyping(false);
+  const handleNext = () => {
+    if (!currentValue.trim()) return;
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(s => s + 1);
+      resetTranscript();
     }
   };
 
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(s => s - 1);
+      resetTranscript();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (currentStep < STEPS.length - 1) handleNext();
+      else handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!currentValue.trim()) return;
+    setIsLoading(true);
+    setError(null);
+
+    const summary = `
+Patient Details:
+- Age: ${formData.age} years
+- Height: ${formData.height} cm
+- Weight: ${formData.weight} kg
+- Current Symptoms: ${formData.symptoms}
+- Previous/Existing Conditions: ${formData.previousDiseases}
+- Current Medications: ${formData.currentMedications}
+
+Based on the above patient profile, provide:
+1. A diagnostic paragraph (3–5 sentences) assessing likely health concerns, possible causes, and general advice.
+2. Then on a new line write "HIGHLIGHTS:" followed by 3–5 key points each on its own line in format "Label: Value" (e.g. "BMI: 24.9 — Normal range", "Risk Level: Moderate").
+Keep language clear, non-alarming, and remind the user to consult a doctor.
+    `.trim();
+
+    try {
+      const response = await api.post("/chat", { message: summary });
+      const raw: string = response.data?.response ?? "";
+
+      // Parse paragraph + highlights
+      const [paragraphPart, highlightsPart] = raw.split(/HIGHLIGHTS:/i);
+      const paragraph = paragraphPart.trim();
+      const highlights: Highlight[] = (highlightsPart ?? "")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line.includes(":"))
+        .map(line => {
+          const colonIdx = line.indexOf(":");
+          return {
+            label: line.slice(0, colonIdx).trim().replace(/^[-•*]\s*/, ""),
+            value: line.slice(colonIdx + 1).trim(),
+          };
+        });
+
+      setResult({ paragraph, highlights });
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    } catch (err: any) {
+      setError("Failed to reach the diagnostics server. Please check your connection and try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReset = () => {
+    setCurrentStep(0);
+    setFormData({});
+    setResult(null);
+    setError(null);
+    resetTranscript();
+  };
+
+  const isLastStep = currentStep === STEPS.length - 1;
+  const progress = ((currentStep) / STEPS.length) * 100;
+  const isTextArea = currentField?.key === "symptoms" || currentField?.key === "previousDiseases" || currentField?.key === "currentMedications";
+
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans">
-      
-      {/* ── Top Bar Header ── */}
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+
+      {/* ── Top Bar ── */}
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => navigate('/')}
             className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors"
           >
@@ -180,130 +185,221 @@ export default function Chat() {
                 HealthAI Diagnostic
               </h1>
               <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Virtual Medical Assistant
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                Virtual Medical Assistant
               </span>
             </div>
           </div>
         </div>
-
-        <button 
-          onClick={initiateWelcomeChat}
+        <button
+          onClick={handleReset}
           className="p-2 border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-colors"
-          title="Reset Conversation"
         >
-          <RefreshCw size={14} /> Clear
+          <RefreshCw size={14} /> Reset
         </button>
       </nav>
 
-      {/* ── Main Scrollable Thread ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 md:p-8 space-y-6 max-w-4xl w-full mx-auto">
-        {messages.map((msg) => {
-          const isBot = msg.sender === "bot";
-          const isErrorMessage = msg.text.startsWith("⚠️");
-          return (
-            <div 
-              key={msg.id} 
-              className={`flex gap-3 md:gap-4 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200 ${
-                isBot ? "mr-auto" : "ml-auto flex-row-reverse"
-              }`}
-            >
-              {/* Avatar Indicator Column */}
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs text-xs font-bold ${
-                isBot ? "bg-white border border-slate-100 text-indigo-600" : "bg-indigo-600 text-white"
-              }`}>
-                {isBot ? <Bot size={16} /> : <User size={16} />}
+      {/* ── Main Content ── */}
+      <div className="flex-1 flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-xl">
+
+          {/* ── Result View ── */}
+          {result ? (
+            <div ref={resultRef} className="space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-300">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md shadow-indigo-200">
+                  <Activity size={22} className="text-white" />
+                </div>
+                <h2 className="text-xl font-black text-slate-800">Diagnostic Summary</h2>
+                <p className="text-slate-400 text-sm mt-1">Based on the information you provided</p>
               </div>
 
-              {/* Chat Text Blocks */}
-              <div className="space-y-1">
-                <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs border ${
-                  isBot 
-                    ? isErrorMessage 
-                      ? "bg-rose-50 text-rose-800 border-rose-100 rounded-tl-none font-medium" 
-                      : "bg-white text-slate-800 border-slate-100 rounded-tl-none" 
-                    : "bg-indigo-600 text-white border-transparent rounded-tr-none font-medium"
-                }`}>
-                  {msg.text}
+              {/* Paragraph */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-xs">
+                <p className="text-slate-700 leading-relaxed text-sm">{result.paragraph}</p>
+              </div>
+
+              {/* Highlights */}
+              {result.highlights.length > 0 && (
+                <div className="space-y-2.5">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Key Highlights</p>
+                  {result.highlights.map((h, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-slate-100 px-4 py-3 flex items-start gap-3 shadow-xs">
+                      <CheckCircle2 size={16} className="text-indigo-500 mt-0.5 shrink-0" />
+                      <div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{h.label}</span>
+                        <p className="text-sm text-slate-800 font-medium mt-0.5">{h.value}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p className={`text-[9px] text-slate-400 px-1 font-semibold ${!isBot && "text-right"}`}>
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              )}
+
+              <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 flex gap-2.5 items-start">
+                <AlertCircle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  This is an AI-generated screening, not a medical diagnosis. Please consult a qualified doctor for clinical evaluation.
+                </p>
+              </div>
+
+              <button
+                onClick={handleReset}
+                className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={14} /> Start New Assessment
+              </button>
+            </div>
+
+          ) : isLoading ? (
+            /* ── Loading State ── */
+            <div className="text-center space-y-4 py-16">
+              <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-md shadow-indigo-200 animate-pulse">
+                <Bot size={26} className="text-white" />
+              </div>
+              <p className="text-slate-700 font-semibold">Analyzing your health profile…</p>
+              <p className="text-slate-400 text-sm">This usually takes a few seconds</p>
+              <div className="flex justify-center gap-1.5 pt-2">
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
+              </div>
+            </div>
+
+          ) : (
+            /* ── Step Form ── */
+            <div className="space-y-6 animate-in fade-in duration-200">
+
+              {/* Progress Header */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
+                    Step {currentStep + 1} of {STEPS.length}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">{Math.round(progress)}% complete</span>
+                </div>
+                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                {/* Step dots */}
+                <div className="flex justify-between px-0.5">
+                  {STEPS.map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        i < currentStep
+                          ? "bg-indigo-600"
+                          : i === currentStep
+                          ? "bg-indigo-400 scale-125"
+                          : "bg-slate-200"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Question Card */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-xs space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                    <Bot size={16} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-slate-800 font-semibold text-base leading-snug">{currentField.label}</p>
+                    {currentField.unit && (
+                      <span className="text-xs text-slate-400 mt-0.5 inline-block">Enter in {currentField.unit}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Input */}
+                <div className="relative">
+                  {isTextArea ? (
+                    <textarea
+                      autoFocus
+                      rows={3}
+                      value={currentValue}
+                      onChange={handleInputChange}
+                      onKeyDown={handleKeyDown}
+                      placeholder={currentField.placeholder}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all resize-none placeholder-slate-400 pr-12"
+                    />
+                  ) : (
+                    <input
+                      autoFocus
+                      type={currentField.type ?? "text"}
+                      value={currentValue}
+                      onChange={handleInputChange}
+                      onKeyDown={handleKeyDown}
+                      placeholder={currentField.placeholder}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder-slate-400 pr-12"
+                    />
+                  )}
+
+                  {/* Mic */}
+                  {isMicSupported && (
+                    <div className="absolute right-2.5 top-2.5">
+                      <MicButton
+                        onClick={handleMicClick}
+                        isListening={isListening}
+                        disabled={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 flex gap-2.5 items-start">
+                  <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-rose-700">{error}</p>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex gap-3">
+                {currentStep > 0 && (
+                  <button
+                    onClick={handleBack}
+                    className="flex-1 h-12 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ChevronLeft size={16} /> Back
+                  </button>
+                )}
+
+                {isLastStep ? (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!currentValue.trim()}
+                    className="flex-1 h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-300 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Sparkles size={15} /> Analyse My Health
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleNext}
+                    disabled={!currentValue.trim()}
+                    className="flex-1 h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-300 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Footer note */}
+              <div className="flex items-center gap-1 justify-center text-slate-400">
+                <Sparkles size={12} className="text-indigo-500" />
+                <p className="text-[10px] font-medium tracking-tight">
+                  AI insights are for educational purposes. Always consult a medical professional.
                 </p>
               </div>
             </div>
-          );
-        })}
-
-        {/* Typing Loader Automation Element */}
-        {isTyping && (
-          <div className="flex gap-3 md:gap-4 max-w-lg mr-auto">
-            <div className="w-8 h-8 rounded-xl bg-white border border-slate-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
-              <Bot size={16} />
-            </div>
-            <div className="bg-white border border-slate-100 rounded-2xl rounded-tl-none px-5 py-3.5 flex items-center justify-center shadow-xs">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" />
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* ── Input Action Bar Form Footer ── */}
-      <div className="bg-white border-t border-slate-200 p-4 md:p-6 shrink-0 z-10">
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSendMessage} className="relative flex items-center">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value)}
-              placeholder="Describe your symptoms or ask a health inquiry..."
-              className={`w-full bg-slate-50 border border-slate-200 rounded-2xl pl-4 py-3.5 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-inner placeholder-slate-400 ${isMicSupported ? 'pr-24' : 'pr-14'}`}
-              disabled={isTyping}
-            />
-
-            {/* Microphone button */}
-            {isMicSupported && (
-              <div className="absolute right-12 flex items-center">
-                <MicButton
-                  onClick={handleMicClick}
-                  isListening={isListening}
-                  disabled={isTyping}
-                />
-              </div>
-            )}
-
-            {/* Unsupported browser notice */}
-            {!isMicSupported && (
-              <span
-                title="Your browser does not support voice input. Please use Chrome or Edge."
-                className="absolute right-14 text-[10px] text-slate-400 hidden sm:block select-none"
-              >
-                🎤 N/A
-              </span>
-            )}
-
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isTyping}
-              className="absolute right-2 p-2 bg-indigo-600 disabled:bg-slate-100 text-white disabled:text-slate-300 rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer disabled:cursor-not-allowed"
-              title="Send Message"
-            >
-              <Send size={16} />
-            </button>
-          </form>
-          <div className="flex items-center gap-1 mt-2.5 px-1 justify-center sm:justify-start text-slate-400">
-            <Sparkles size={12} className="text-indigo-500" />
-            <p className="text-[10px] font-medium tracking-tight">
-              AI insights are for educational purposes. Always cross-reference with medical experts.
-            </p>
-          </div>
+          )}
         </div>
       </div>
-
     </div>
   );
 }

@@ -1,7 +1,6 @@
-// useSpeechRecognition.ts
+// hooks/useSpeechRecognition.ts
 import { useState, useEffect, useRef, useCallback } from "react";
 
-/* ─── Type augmentation for browser Speech Recognition API ─── */
 interface SpeechRecognitionEvent extends Event {
   readonly resultIndex: number;
   readonly results: SpeechRecognitionResultList;
@@ -41,16 +40,11 @@ export interface UseSpeechRecognitionReturn {
   resetTranscript: () => void;
 }
 
-/**
- * useSpeechRecognition
- * Wraps the browser Web Speech API. Enabled with interim processing to 
- * catch quick utterances dynamically.
- */
 export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [transcript, setTranscript] = useState<string>("");
   const [isListening, setIsListening] = useState<boolean>(false);
-
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  const finalTranscriptRef = useRef<string>(""); // Accumulates final (non-interim) results
 
   const SpeechRecognitionAPI =
     typeof window !== "undefined"
@@ -63,31 +57,40 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     if (!isSupported || !SpeechRecognitionAPI) return;
 
     const recognition = new SpeechRecognitionAPI();
-
-    recognition.lang = "hi-IN";
-    recognition.continuous = false;      
-    recognition.interimResults = true;  // Enabled to capture words instantly
+    recognition.lang = "en-IN"; // English with Indian accent; fallback handles Hindi words naturally
+    recognition.continuous = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
+    recognition.onstart = () => setIsListening(true);
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let currentResult = "";
+      let interim = "";
+      let final = finalTranscriptRef.current;
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        currentResult += event.results[i][0].transcript;
+        const result = event.results[i];
+        if (result.isFinal) {
+          final += result[0].transcript + " ";
+        } else {
+          interim += result[0].transcript;
+        }
       }
-      setTranscript(currentResult);
+
+      finalTranscriptRef.current = final;
+      // Show final + any ongoing interim text
+      setTranscript((final + interim).trim());
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("[useSpeechRecognition] Recognition error:", event.error);
+      console.error("[useSpeechRecognition] Error:", event.error);
       setIsListening(false);
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      // Commit whatever accumulated as the final transcript
+      setTranscript(finalTranscriptRef.current.trim());
     };
 
     recognitionRef.current = recognition;
@@ -96,15 +99,16 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
     };
-  }, [isSupported, SpeechRecognitionAPI]);
+  }, [isSupported]);
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current || isListening) return;
+    finalTranscriptRef.current = "";
     setTranscript("");
     try {
       recognitionRef.current.start();
     } catch (err) {
-      console.error("[useSpeechRecognition] Failed to start recognition:", err);
+      console.error("[useSpeechRecognition] Failed to start:", err);
     }
   }, [isListening]);
 
@@ -114,15 +118,9 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   }, [isListening]);
 
   const resetTranscript = useCallback(() => {
+    finalTranscriptRef.current = "";
     setTranscript("");
   }, []);
 
-  return {
-    transcript,
-    isListening,
-    isSupported,
-    startListening,
-    stopListening,
-    resetTranscript,
-  };
+  return { transcript, isListening, isSupported, startListening, stopListening, resetTranscript };
 }
